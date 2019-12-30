@@ -118,7 +118,6 @@ public class KioskActivity extends CordovaActivity {
             PendingIntent pendingIntent = PendingIntent.getActivity(activity.getApplicationContext(), 666, intent, PendingIntent.FLAG_ONE_SHOT);
             AlarmManager mgr = (AlarmManager) activity.getSystemService(Context.ALARM_SERVICE);
             mgr.set(AlarmManager.RTC, System.currentTimeMillis() +  500, pendingIntent);
-            running = false;
             activity.finish();
             System.exit(2);
         }
