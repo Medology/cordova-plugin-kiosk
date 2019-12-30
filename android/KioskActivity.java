@@ -3,16 +3,19 @@ package jk.cordova.plugin.kiosk;
 import android.app.ActionBar;
 import android.app.Activity;
 import android.app.ActivityManager;
+import android.app.AlarmManager;
+import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
 import org.apache.cordova.*;
-import android.widget.*;
+import android.util.Log;
 import android.view.Window;
 import android.view.View;
 import android.view.WindowManager;
 import android.view.KeyEvent;
 import android.view.ViewGroup.LayoutParams;
+import android.widget.*;
 import java.lang.Integer;
 import java.util.Collections;
 import java.util.Set;
@@ -49,6 +52,12 @@ public class KioskActivity extends CordovaActivity {
             finish(); // prevent more instances of kiosk activity
         }
 
+        Thread.setDefaultUncaughtExceptionHandler(new UncaughtExceptionHandler(this));
+        // if app restarted due to crash, add toast to notify users why the app restarted
+        if (this.getIntent().getBooleanExtra("crash", false)) {
+            Toast.makeText(this, "Raven is restarting due to a critical error.", Toast.LENGTH_LONG).show();
+        }
+
         loadUrl(launchUrl);
 
         // https://github.com/apache/cordova-plugin-statusbar/blob/master/src/android/StatusBar.java
@@ -78,6 +87,41 @@ public class KioskActivity extends CordovaActivity {
     public boolean onKeyDown(int keyCode, KeyEvent event) {
         System.out.println("onKeyDown event: keyCode = " + event.getKeyCode());
         return ! allowedKeys.contains(event.getKeyCode()); // prevent event from being propagated if not allowed
+    }
+
+    public class UncaughtExceptionHandler implements Thread.UncaughtExceptionHandler {
+
+        private Activity activity;
+
+        public UncaughtExceptionHandler(Activity a) {
+            activity = a;
+        }
+
+        /**
+        * Uncaught exceptions cause the app to crash, exposing customers to the Android system.
+        * This is something we want to avoid at all costs, so this uncaught exception handler is used
+        * to catch all uncaught exceptions and automatically restart the application.
+        *
+        * Implementation from https://medium.com/@ssaurel/how-to-auto-restart-an-android-application-after-a-crash-or-a-force-close-error-1a361677c0ce
+        */
+        @Override
+        public void uncaughtException(Thread thread, Throwable ex) {
+            Log.d("RAVEN", "******** UNCAUGHT EXCEPTION, APP CRASHED ********");
+            if (ex != null) {
+                ex.printStackTrace();
+                if (ex.getMessage() != null) Log.d("RAVEN", ex.getMessage());
+            }
+
+            Intent intent = activity.getPackageManager().getLaunchIntentForPackage("raven.scanner.app");
+            intent.putExtra("crash", true);
+            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_CLEAR_TASK | Intent.FLAG_ACTIVITY_NEW_TASK);
+            PendingIntent pendingIntent = PendingIntent.getActivity(activity.getApplicationContext(), 666, intent, PendingIntent.FLAG_ONE_SHOT);
+            AlarmManager mgr = (AlarmManager) activity.getSystemService(Context.ALARM_SERVICE);
+            mgr.set(AlarmManager.RTC, System.currentTimeMillis() +  500, pendingIntent);
+            running = false;
+            activity.finish();
+            System.exit(2);
+        }
     }
 }
 
